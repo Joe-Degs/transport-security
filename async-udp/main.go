@@ -54,12 +54,12 @@ func ServeUDP(addr string, f func(c *net.UDPConn, addr *net.UDPAddr, msg []byte)
 	}
 	fmt.Println("listening on ", conn.LocalAddr())
 	defer conn.Close()
+	buf := make([]byte, MAX)
 	for {
-		buf := make([]byte, MAX)
 		_, raddr, err := conn.ReadFromUDP(buf)
 		if err != nil {
 			throwErr(err)
 		}
-		go f(conn, raddr, buf)
+		go f(conn, raddr, buf[:])
 	}
 }
