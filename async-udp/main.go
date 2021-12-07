@@ -7,26 +7,29 @@ import (
 	"os"
 )
 
-const MAX = 10
+const MAX = 1024
 
 func main() {
-	ServeUDP(":1024", func(conn *net.UDPConn, addr *net.UDPAddr, msg []byte) {
-		//raddr, err := conn.ReadFromUDP(make([]byte, 10))
-		//if err != nil {
-		//	throwErr(err)
-		//}
-		//fmt.Fprintln(conn, "it totally works!")
-
-		if _, err := conn.WriteToUDP(msg, addr); err != nil {
+	ServeUDP(":1024", func(conn *net.UDPConn, addr *net.UDPAddr, msg []byte, id int) {
+		if n, err := conn.WriteToUDP(msg, addr); err != nil {
 			throwErr(err)
+			return
+		} else {
+			// interesting error i got here. Because I am using the ReadFromUDP,
+			// and WriteToUDP to recieve and send messages, the connection is
+			// not bound to any single remote host so the conn.RemoteAddr
+			// returns a nil interface which i didn't realise at first. took
+			// some doing to debug. So i was getting a nil pointer dereference
+			// error and was wondering why?. So i tried casting the Addr
+			// interface returned to a *net.IPAddr and saw i was trying to cast
+			// from nil.
+			fmt.Printf("%d) read and wrote %d bytes to %s\n", id, n, addr)
 		}
-		fmt.Println("served ", conn.RemoteAddr)
 	})
 }
 
 func throwErr(err error) {
 	fmt.Fprintln(os.Stderr, err)
-	os.Exit(1)
 }
 
 // Writing a udp server in go was not trivial. It took me days to literally do
@@ -43,23 +46,28 @@ func throwErr(err error) {
 // be blocking. So i put it in a loop and was getting a socket bind yada-yada
 // error. It turns out the blocking function is the ReadFromUDP function and
 // that should be the one in the loop.
-func ServeUDP(addr string, f func(c *net.UDPConn, addr *net.UDPAddr, msg []byte)) {
+func ServeUDP(addr string, f func(c *net.UDPConn, addr *net.UDPAddr, msg []byte, id int)) {
 	laddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		throwErr(err)
+		os.Exit(1)
 	}
 	conn, err := net.ListenUDP("udp", laddr)
 	if err != nil {
 		throwErr(err)
+		os.Exit(1)
 	}
 	fmt.Println("listening on ", conn.LocalAddr())
 	defer conn.Close()
 	buf := make([]byte, MAX)
+	var counter int
 	for {
 		_, raddr, err := conn.ReadFromUDP(buf)
 		if err != nil {
 			throwErr(err)
+			continue
 		}
-		go f(conn, raddr, buf[:])
+		counter++
+		go f(conn, raddr, buf[:], counter)
 	}
 }
